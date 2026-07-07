@@ -37,6 +37,10 @@ WORK_TICK_SECONDS = _float("WORK_TICK_SECONDS", 0.5)
 # Port the worker's control HTTP server ("2-minute warning" door) listens on.
 WORKER_PORT = _int("WORKER_PORT", 8000)
 
+# --- Producer ------------------------------------------------------------
+# Default number of jobs pushed when none is given on the CLI / env.
+DEFAULT_JOB_COUNT = _int("JOB_COUNT", 50)
+
 # --- Orchestrator --------------------------------------------------------
 JOBS_PER_WORKER = _int("JOBS_PER_WORKER", 5)
 MIN_WORKERS = _int("MIN_WORKERS", 1)
