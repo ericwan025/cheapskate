@@ -60,6 +60,17 @@ SPOT_POLL_SECONDS = _float("SPOT_POLL_SECONDS", 5.0)
 IMDS_BASE = os.environ.get("IMDS_BASE", "http://169.254.169.254")
 SPOT_ACTION_PATH = os.environ.get("SPOT_ACTION_PATH", "/latest/meta-data/spot/instance-action")
 
+# --- Dashboard (Phase 4) -------------------------------------------------
+# Port the read-only status dashboard serves on.
+DASHBOARD_PORT = _int("DASHBOARD_PORT", 8080)
+# How often (seconds) the dashboard page auto-refreshes its stats.
+DASHBOARD_REFRESH_SECONDS = _int("DASHBOARD_REFRESH_SECONDS", 2)
+# Approximate hourly $ cost per worker instance, used for the live burn-rate
+# estimate. Spot is cheap-but-interruptible; on-demand is the reliable baseline.
+# Defaults are ballpark t3.small us-east-1 figures — override per instance type.
+SPOT_HOURLY_COST = _float("SPOT_HOURLY_COST", 0.0063)
+ON_DEMAND_HOURLY_COST = _float("ON_DEMAND_HOURLY_COST", 0.0208)
+
 # --- Interrupter ---------------------------------------------------------
 # DNS name that resolves to all worker replicas (docker-compose service name).
 # The interrupter picks one at random and sends it the "2-minute warning".

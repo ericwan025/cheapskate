@@ -6,7 +6,7 @@
 # containers itself via the Docker socket based on queue depth — so `up` starts
 # only redis + orchestrator, and there is no `--scale worker=N` any more.
 #
-#   docker compose up --build redis orchestrator                       # run stack
+#   docker compose up --build redis orchestrator dashboard             # run stack + UI at :8080
 #   docker compose run --rm --no-deps -e JOB_COUNT=50 producer         # push 50 jobs
 #   docker compose run --rm --no-deps -e INTERRUPT_COUNT=1 interrupter  # chaos
 #   docker compose --profile manual up worker                          # 1 standalone worker (debug)
@@ -65,6 +65,24 @@ services:
       <<: *app-env
       JOB_MIN_SECONDS: ${JOB_MIN_SECONDS:-5.0}
       JOB_MAX_SECONDS: ${JOB_MAX_SECONDS:-30.0}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Read-only status dashboard (Phase 4). Shows queue depth, jobs completed, the
+  # active worker fleet, and a live cost burn-rate — auto-refreshing in the
+  # browser. Reads the docker socket to count the orchestrator's workers.
+  # Open http://localhost:8080 after `up`.
+  dashboard:
+    <<: *app-image
+    command: ["python", "-m", "cheapskate.dashboard"]
+    environment:
+      <<: *app-env
+    ports:
+      - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
