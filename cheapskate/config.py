@@ -51,3 +51,19 @@ JOBS_PER_WORKER = _int("JOBS_PER_WORKER", 5)
 MIN_WORKERS = _int("MIN_WORKERS", 1)
 MAX_WORKERS = _int("MAX_WORKERS", 10)
 ORCHESTRATOR_INTERVAL_SECONDS = _float("ORCHESTRATOR_INTERVAL_SECONDS", 3.0)
+
+# --- Scaler (Phase 2: orchestrator actuates worker containers) -----------
+# Image the orchestrator launches worker containers from (same shared image).
+WORKER_IMAGE = os.environ.get("WORKER_IMAGE", "cheapskate:local")
+# Docker network the launched workers join so they can reach redis by name.
+# Empty => auto-detect the orchestrator's own network at runtime.
+WORKER_NETWORK = os.environ.get("WORKER_NETWORK", "")
+# Grace period (seconds) a worker gets to drain after SIGTERM before SIGKILL.
+# Must exceed the worker's own drain wait so in-flight jobs are requeued.
+WORKER_STOP_TIMEOUT = _int("WORKER_STOP_TIMEOUT", 15)
+# Label used to find/own the workers this orchestrator manages.
+MANAGED_LABEL = os.environ.get("MANAGED_LABEL", "cheapskate.managed-by")
+MANAGED_VALUE = os.environ.get("MANAGED_VALUE", "orchestrator")
+# Remove managed workers when the orchestrator itself shuts down, so a
+# `compose down` / restart doesn't leave an orphaned fleet behind.
+CLEANUP_ON_EXIT = os.environ.get("CLEANUP_ON_EXIT", "true").lower() == "true"

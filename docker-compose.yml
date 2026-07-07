@@ -1,19 +1,25 @@
-# Phase 1 local stack: Redis + orchestrator + producer + N worker replicas.
+# Local stack: Redis + orchestrator (+ the one-shot producer/interrupter tools).
 # All app services share one image (built from ./Dockerfile) and differ only by
 # the command + environment, so behaviour is entirely env-driven.
 #
-#   docker compose up --build --scale worker=4                        # run the fleet
-#   docker compose run --rm --no-deps -e JOB_COUNT=50 producer        # push 50 jobs
-#   docker compose run --rm --no-deps -e INTERRUPT_COUNT=1 interrupter # chaos
+# Phase 2: the orchestrator OWNS the worker fleet. It launches/kills worker
+# containers itself via the Docker socket based on queue depth — so `up` starts
+# only redis + orchestrator, and there is no `--scale worker=N` any more.
+#
+#   docker compose up --build redis orchestrator                       # run stack
+#   docker compose run --rm --no-deps -e JOB_COUNT=50 producer         # push 50 jobs
+#   docker compose run --rm --no-deps -e INTERRUPT_COUNT=1 interrupter  # chaos
+#   docker compose --profile manual up worker                          # 1 standalone worker (debug)
 #
 # NOTES on the one-shot tools:
 #  - count goes via env var, not a positional arg: `docker compose run SERVICE
 #    <token>` REPLACES the container command with <token>.
 #  - always pass --no-deps: without it, `run` reconciles dependency services to
-#    their configured scale (1) and stops+removes extra worker replicas.
+#    their configured scale (1).
 #
 # Workers discover each other's shared queue via Redis; the interrupter finds
-# worker replicas via the "worker" service DNS name.
+# workers via the "worker" DNS name — orchestrator-launched containers carry
+# that name as a network alias, so discovery works for them too.
 
 x-app-image: &app-image
   build:
@@ -33,30 +39,34 @@ services:
       timeout: 3s
       retries: 10
 
-  # Long-running fleet. Scale with `--scale worker=N`. No WORKER_ID is set, so
-  # each replica falls back to its container hostname — unique per replica.
-  # `restart` simulates an ASG replacing an instance after a spot interruption:
-  # a worker that drains and exits is brought back to keep the fleet at size.
+  # Worker template. In Phase 2 the orchestrator launches workers itself, so this
+  # is NOT auto-started (profile: manual) — it exists only as an image build
+  # target and for running a single standalone worker while debugging.
   worker:
     <<: *app-image
     command: ["python", "-m", "cheapskate.worker"]
     environment:
       <<: *app-env
-      # Job duration knobs pass through from the host shell so tests can speed
-      # things up (defaults match config.py).
       JOB_MIN_SECONDS: ${JOB_MIN_SECONDS:-5.0}
       JOB_MAX_SECONDS: ${JOB_MAX_SECONDS:-30.0}
     depends_on:
       redis:
         condition: service_healthy
-    restart: unless-stopped
+    profiles: ["manual"]
 
-  # Long-running control loop. Phase 1: logs the worker-count decision only.
+  # Long-running control loop. Phase 2: actuates the fleet — starts/stops worker
+  # containers via the Docker socket to match queue depth. The socket mount is
+  # what lets it talk to the daemon; job-duration knobs pass through so it can
+  # forward them to the workers it launches.
   orchestrator:
     <<: *app-image
     command: ["python", "-m", "cheapskate.orchestrator"]
     environment:
       <<: *app-env
+      JOB_MIN_SECONDS: ${JOB_MIN_SECONDS:-5.0}
+      JOB_MAX_SECONDS: ${JOB_MAX_SECONDS:-30.0}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       redis:
         condition: service_healthy
