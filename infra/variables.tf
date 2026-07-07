@@ -50,3 +50,47 @@ variable "dlq_retention_seconds" {
   type        = number
   default     = 1209600
 }
+
+# --- ECR + launch template --------------------------------------------------
+
+variable "ecr_keep_last_images" {
+  description = "Number of recent worker images to retain in ECR; older ones expire."
+  type        = number
+  default     = 5
+}
+
+variable "worker_image_tag" {
+  description = "Tag of the worker image (in ECR) the instances should run."
+  type        = string
+  default     = "latest"
+}
+
+variable "instance_type" {
+  description = "EC2 instance type for workers. A small burstable type is plenty for the demo."
+  type        = string
+  default     = "t3.small"
+}
+
+variable "ami_id" {
+  description = "Override the worker AMI. Empty => latest Amazon Linux 2023 x86_64 (resolved via SSM)."
+  type        = string
+  default     = ""
+}
+
+variable "poll_interval_seconds" {
+  description = "How often the worker checks the EC2 spot-interruption metadata endpoint."
+  type        = number
+  default     = 5
+}
+
+variable "instance_job_min_seconds" {
+  description = "Min simulated job duration on the real fleet."
+  type        = number
+  default     = 5
+}
+
+variable "instance_job_max_seconds" {
+  description = "Max simulated job duration on the real fleet."
+  type        = number
+  default     = 30
+}

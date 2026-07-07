@@ -4,7 +4,7 @@ Provisions the AWS side of cheapskate. Built incrementally, one commit per piece
 
 - [x] **SQS** — job queue + dead-letter queue (`sqs.tf`)
 - [x] **IAM** — least-privilege worker role + instance profile (`iam.tf`)
-- [ ] Launch template — worker image from ECR
+- [x] **ECR + launch template** — worker image repo + boot config (`ecr.tf`, `launch_template.tf`)
 - [ ] ASGs — spot + on-demand on the same launch template
 
 ## Credentials
