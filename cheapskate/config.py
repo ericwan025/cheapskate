@@ -41,6 +41,11 @@ WORKER_PORT = _int("WORKER_PORT", 8000)
 # Default number of jobs pushed when none is given on the CLI / env.
 DEFAULT_JOB_COUNT = _int("JOB_COUNT", 50)
 
+# --- Interrupter ---------------------------------------------------------
+# DNS name that resolves to all worker replicas (docker-compose service name).
+# The interrupter picks one at random and sends it the "2-minute warning".
+WORKER_SERVICE = os.environ.get("WORKER_SERVICE", "worker")
+
 # --- Orchestrator --------------------------------------------------------
 JOBS_PER_WORKER = _int("JOBS_PER_WORKER", 5)
 MIN_WORKERS = _int("MIN_WORKERS", 1)
