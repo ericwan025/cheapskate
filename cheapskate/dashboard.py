@@ -20,7 +20,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
-from . import config, fleet
+from . import config, events, fleet
 from .queue import make_queue
 
 app = FastAPI()
@@ -38,6 +38,7 @@ def _stats() -> dict:
         "workers": counts,
         "worker_total": sum(counts.values()),
         "cost_per_hour": fleet.cost_per_hour(counts),
+        "events": events.recent(25),
         "ts": int(time.time()),
     }
 
@@ -77,6 +78,19 @@ _PAGE = """<!doctype html>
             padding: 4px 0; }
   .bucket .n { font-weight: 600; }
   .spot { color: #4ade80; } .on_demand { color: #60a5fa; } .local { color: #c4b5fd; }
+  .log { padding: 0 24px 8px; }
+  .log h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px;
+            color: #8a8a8a; margin: 0 0 10px; }
+  .evt { display: grid; grid-template-columns: 78px 90px 1fr; gap: 12px;
+         font-size: 13px; padding: 6px 10px; border-radius: 8px; align-items: baseline; }
+  .evt:nth-child(odd) { background: #14171d; }
+  .evt .t { color: #666; font-variant-numeric: tabular-nums; }
+  .tag { font-size: 11px; font-weight: 600; text-transform: uppercase;
+         letter-spacing: .4px; }
+  .tag.interrupt { color: #f59e0b; } .tag.requeue { color: #38bdf8; }
+  .tag.orphan { color: #f87171; }
+  .evt .d { color: #cfcfcf; }
+  .evt .d b { color: #e6e6e6; }
   .foot { padding: 0 24px 24px; color: #666; font-size: 12px; }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
          background: #4ade80; margin-right: 6px; vertical-align: middle; }
@@ -97,6 +111,10 @@ _PAGE = """<!doctype html>
     <div id="buckets" style="margin-top:10px;">—</div>
   </div>
 </div>
+<div class="log">
+  <h2>Interruptions &amp; retries</h2>
+  <div id="events">—</div>
+</div>
 <div class="foot">auto-refresh every __REFRESH__s &middot; updated <span id="updated">—</span></div>
 <script>
 const REFRESH = __REFRESH__ * 1000;
@@ -106,6 +124,17 @@ function fmtBuckets(w) {
   return keys.map(k =>
     `<div class="bucket"><span class="${k}">${k.replace('_',' ')}</span><span class="n">${w[k]}</span></div>`
   ).join('');
+}
+function esc(s) { return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function fmtEvents(evts) {
+  if (!evts || !evts.length) return '<span style="color:#666">no interruptions yet</span>';
+  return evts.map(e => {
+    const t = new Date(e.ts * 1000).toLocaleTimeString();
+    const job = e.job_id != null ? ` <b>job ${esc(e.job_id)}</b>` : '';
+    return `<div class="evt"><span class="t">${t}</span>`
+      + `<span class="tag ${esc(e.type)}">${esc(e.type)}</span>`
+      + `<span class="d">${esc(e.detail)}${job} <span style="color:#666">@${esc(e.worker_id)}</span></span></div>`;
+  }).join('');
 }
 async function tick() {
   try {
@@ -117,6 +146,7 @@ async function tick() {
     document.getElementById('worker_total').textContent = s.worker_total;
     document.getElementById('cost').textContent = '$' + s.cost_per_hour.toFixed(4);
     document.getElementById('buckets').innerHTML = fmtBuckets(s.workers);
+    document.getElementById('events').innerHTML = fmtEvents(s.events);
     document.getElementById('updated').textContent = new Date(s.ts * 1000).toLocaleTimeString();
   } catch (e) {
     document.getElementById('updated').textContent = 'unreachable';

@@ -28,6 +28,10 @@ PROCESSING_PREFIX = os.environ.get("PROCESSING_PREFIX", "jobs:processing:")
 # Set of completed job ids (dedup) + a raw completion counter (dup detection).
 COMPLETED_SET_KEY = os.environ.get("COMPLETED_SET_KEY", "jobs:completed")
 COMPLETED_COUNT_KEY = os.environ.get("COMPLETED_COUNT_KEY", "jobs:completed_count")
+# Capped list of recent lifecycle events (interruptions, requeues, recoveries)
+# that the dashboard displays. Newest first; trimmed to EVENTS_MAX entries.
+EVENTS_KEY = os.environ.get("EVENTS_KEY", "events:log")
+EVENTS_MAX = _int("EVENTS_MAX", 100)
 
 # --- Worker --------------------------------------------------------------
 # Simulated job processing time is a random sleep in [MIN, MAX] seconds.

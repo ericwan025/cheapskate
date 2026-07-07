@@ -25,7 +25,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 
-from . import config, spot_watch
+from . import config, events, spot_watch
 from .queue import make_queue
 
 WORKER_ID = os.environ.get("WORKER_ID") or socket.gethostname()
@@ -49,12 +49,21 @@ class Worker:
         local POST /interrupt, a SIGTERM, and the EC2 spot-interruption watcher."""
         if not self.interrupt.is_set():
             self.interrupt.set()
+            events.record(
+                events.INTERRUPT, WORKER_ID,
+                job_id=self.current_job["id"] if self.current_job else None,
+                detail="2-minute warning — draining",
+            )
 
     # --- the work loop ---------------------------------------------------
     def run(self) -> None:
         recovered = self.queue.requeue_orphans()
         if recovered:
             log.info("recovered %d orphaned job(s) from a previous run", recovered)
+            events.record(
+                events.ORPHAN_RECOVERED, WORKER_ID,
+                detail=f"recovered {recovered} orphaned job(s)",
+            )
 
         while not self.interrupt.is_set():
             job = self.queue.reserve()   # blocks briefly, then re-checks interrupt
@@ -67,6 +76,10 @@ class Worker:
         # We were told to drain. If we still hold a job, give it back.
         if self.current_job is not None:
             log.info("interrupted mid-job %s — requeueing", self.current_job["id"])
+            events.record(
+                events.REQUEUE, WORKER_ID, job_id=self.current_job["id"],
+                detail="requeued in-flight job on drain",
+            )
             self.queue.requeue(self.current_job)
             self.current_job = None
 
@@ -82,6 +95,10 @@ class Worker:
             if self.interrupt.is_set():
                 # Abandon: hand the job back so no work is lost. run() requeues.
                 log.info("START->ABANDON job %s at %.1fs (interrupt)", job["id"], elapsed)
+                events.record(
+                    events.REQUEUE, WORKER_ID, job_id=job["id"],
+                    detail=f"abandoned at {elapsed:.1f}s — requeued",
+                )
                 self.queue.requeue(job)
                 self.current_job = None
                 return
@@ -119,7 +136,7 @@ async def lifespan(app: FastAPI):
     # process dies, so no work is lost. Docker allows 10s before SIGKILL.
     if not worker.interrupt.is_set():
         log.info("received shutdown signal — draining like an interruption")
-        worker.interrupt.set()
+        worker.request_drain()
     worker.stopped.wait(timeout=8.0)
 
 
@@ -131,7 +148,7 @@ def interrupt():
     """Local stand-in for the AWS spot 2-minute warning."""
     if not worker.interrupt.is_set():
         log.info("received INTERRUPT (2-minute warning) — will stop taking new jobs")
-        worker.interrupt.set()
+        worker.request_drain()
     return {"status": "draining", "worker_id": WORKER_ID}
 
 
