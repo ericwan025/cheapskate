@@ -1,0 +1,80 @@
+# Phase 1 local stack: Redis + orchestrator + producer + N worker replicas.
+# All app services share one image (built from ./Dockerfile) and differ only by
+# the command + environment, so behaviour is entirely env-driven.
+#
+#   docker compose up --build --scale worker=4     # run the fleet
+#   docker compose run --rm producer 50            # push 50 jobs
+#   docker compose run --rm interrupter 1          # chaos: interrupt a worker
+#
+# Workers discover each other's shared queue via Redis; the interrupter finds
+# worker replicas via the "worker" service DNS name.
+
+x-app-image: &app-image
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: cheapskate:local
+
+x-app-env: &app-env
+  REDIS_URL: redis://redis:6379/0
+
+services:
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+
+  # Long-running fleet. Scale with `--scale worker=N`. No WORKER_ID is set, so
+  # each replica falls back to its container hostname — unique per replica.
+  # `restart` simulates an ASG replacing an instance after a spot interruption:
+  # a worker that drains and exits is brought back to keep the fleet at size.
+  worker:
+    <<: *app-image
+    command: ["python", "-m", "cheapskate.worker"]
+    environment:
+      <<: *app-env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Long-running control loop. Phase 1: logs the worker-count decision only.
+  orchestrator:
+    <<: *app-image
+    command: ["python", "-m", "cheapskate.orchestrator"]
+    environment:
+      <<: *app-env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # One-shot: pushes jobs then exits. Override count as a command arg, e.g.
+  # `docker compose run --rm producer 200`. Not started by `up` (profile).
+  producer:
+    <<: *app-image
+    command: ["python", "-m", "cheapskate.job_producer"]
+    environment:
+      <<: *app-env
+      JOB_COUNT: "50"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: "no"
+    profiles: ["tools"]
+
+  # One-shot chaos tool: interrupt a random worker. Not started by `up`.
+  # `docker compose run --rm interrupter 2` interrupts two random workers.
+  interrupter:
+    <<: *app-image
+    command: ["python", "-m", "cheapskate.interrupter"]
+    environment:
+      <<: *app-env
+      WORKER_SERVICE: worker
+    depends_on:
+      - worker
+    restart: "no"
+    profiles: ["tools"]
