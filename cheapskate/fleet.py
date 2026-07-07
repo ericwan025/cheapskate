@@ -21,9 +21,10 @@ log = logging.getLogger("fleet")
 _HOURLY_COST = {
     "spot": config.SPOT_HOURLY_COST,
     "on_demand": config.ON_DEMAND_HOURLY_COST,
-    # A local docker worker has no real price; bill it at the on-demand rate so
-    # the estimate is meaningful during local testing.
-    "local": config.ON_DEMAND_HOURLY_COST,
+    # A local docker worker has no real price; it stands in for the cheap spot
+    # tier in the local demo, so bill it at the spot rate. That way the actual-vs-
+    # 100%-on-demand comparison shows real savings without any AWS spend.
+    "local": config.SPOT_HOURLY_COST,
 }
 
 

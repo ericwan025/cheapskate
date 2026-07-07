@@ -20,7 +20,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
-from . import config, events, fleet
+from . import config, cost, events, fleet
 from .queue import make_queue
 
 app = FastAPI()
@@ -31,13 +31,16 @@ _queue = make_queue(worker_id="dashboard")
 
 def _stats() -> dict:
     counts = fleet.fleet_counts()
+    actual_rate, hypo_rate = cost.rates(counts)
     return {
         "backend": config.QUEUE_BACKEND,
         "pending": _queue.pending_depth(),
         "completed": _queue.completed_count(),
         "workers": counts,
         "worker_total": sum(counts.values()),
-        "cost_per_hour": fleet.cost_per_hour(counts),
+        "cost_per_hour": actual_rate,
+        "hypothetical_per_hour": hypo_rate,
+        "cost": cost.totals(),
         "events": events.recent(25),
         "ts": int(time.time()),
     }
@@ -78,6 +81,13 @@ _PAGE = """<!doctype html>
             padding: 4px 0; }
   .bucket .n { font-weight: 600; }
   .spot { color: #4ade80; } .on_demand { color: #60a5fa; } .local { color: #c4b5fd; }
+  .hero { margin: 24px 24px 0; background: linear-gradient(135deg,#12261a,#101822);
+          border: 1px solid #1f3a2a; border-radius: 14px; padding: 20px 24px;
+          display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 28px; }
+  .hero .big { font-size: 38px; font-weight: 700; color: #4ade80; }
+  .hero .pct { font-size: 16px; color: #4ade80; }
+  .hero .vs { color: #8a8a8a; font-size: 14px; }
+  .hero .vs b { color: #cfcfcf; font-variant-numeric: tabular-nums; }
   .log { padding: 0 24px 8px; }
   .log h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px;
             color: #8a8a8a; margin: 0 0 10px; }
@@ -101,6 +111,13 @@ _PAGE = """<!doctype html>
   <h1>cheapskate <span class="dot"></span></h1>
   <div class="sub">cost-aware autoscaler &middot; backend: <span id="backend">—</span></div>
 </header>
+<div class="hero">
+  <div><div class="label">Saved so far vs 100% on-demand</div>
+    <div><span class="big" id="saved">—</span> <span class="pct" id="saved_pct"></span></div>
+  </div>
+  <div class="vs">actual <b id="c_actual">—</b> &nbsp;·&nbsp; on-demand would be <b id="c_hypo">—</b><br>
+    now: <b id="rate_actual">—</b>/hr vs <b id="rate_hypo">—</b>/hr</div>
+</div>
 <div class="grid">
   <div class="card"><div class="label">Jobs waiting</div><div class="value" id="pending">—</div></div>
   <div class="card"><div class="label">Jobs completed</div><div class="value" id="completed">—</div></div>
@@ -145,6 +162,12 @@ async function tick() {
     document.getElementById('completed').textContent = s.completed;
     document.getElementById('worker_total').textContent = s.worker_total;
     document.getElementById('cost').textContent = '$' + s.cost_per_hour.toFixed(4);
+    document.getElementById('saved').textContent = '$' + s.cost.saved.toFixed(4);
+    document.getElementById('saved_pct').textContent = s.cost.saved_pct ? '(' + s.cost.saved_pct + '%)' : '';
+    document.getElementById('c_actual').textContent = '$' + s.cost.actual.toFixed(4);
+    document.getElementById('c_hypo').textContent = '$' + s.cost.hypothetical.toFixed(4);
+    document.getElementById('rate_actual').textContent = '$' + s.cost_per_hour.toFixed(4);
+    document.getElementById('rate_hypo').textContent = '$' + s.hypothetical_per_hour.toFixed(4);
     document.getElementById('buckets').innerHTML = fmtBuckets(s.workers);
     document.getElementById('events').innerHTML = fmtEvents(s.events);
     document.getElementById('updated').textContent = new Date(s.ts * 1000).toLocaleTimeString();

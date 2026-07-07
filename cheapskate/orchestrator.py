@@ -21,7 +21,7 @@ import math
 import signal
 import time
 
-from . import config
+from . import config, cost, fleet
 from .queue import make_queue
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [orchestrator] %(message)s")
@@ -101,6 +101,10 @@ def run() -> None:
             # pressure shifts even when the total is unchanged.
             if scaler is not None:
                 scaler.scale_to(want)
+
+            # Integrate actual vs. 100%-on-demand cost over this interval so the
+            # dashboard can show what the spot mix is saving.
+            cost.accumulate(fleet.fleet_counts())
 
             last_decision = want
             time.sleep(config.ORCHESTRATOR_INTERVAL_SECONDS)

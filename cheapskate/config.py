@@ -32,6 +32,11 @@ COMPLETED_COUNT_KEY = os.environ.get("COMPLETED_COUNT_KEY", "jobs:completed_coun
 # that the dashboard displays. Newest first; trimmed to EVENTS_MAX entries.
 EVENTS_KEY = os.environ.get("EVENTS_KEY", "events:log")
 EVENTS_MAX = _int("EVENTS_MAX", 100)
+# Running cost accounting (Phase 5): dollars accrued so far by the real fleet vs.
+# the same workload run 100% on-demand, integrated over time by the orchestrator.
+COST_ACTUAL_KEY = os.environ.get("COST_ACTUAL_KEY", "cost:actual")
+COST_HYPO_KEY = os.environ.get("COST_HYPO_KEY", "cost:hypothetical")
+COST_TS_KEY = os.environ.get("COST_TS_KEY", "cost:last_ts")
 
 # --- Worker --------------------------------------------------------------
 # Simulated job processing time is a random sleep in [MIN, MAX] seconds.
