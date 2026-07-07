@@ -2,9 +2,15 @@
 # All app services share one image (built from ./Dockerfile) and differ only by
 # the command + environment, so behaviour is entirely env-driven.
 #
-#   docker compose up --build --scale worker=4     # run the fleet
-#   docker compose run --rm producer 50            # push 50 jobs
-#   docker compose run --rm interrupter 1          # chaos: interrupt a worker
+#   docker compose up --build --scale worker=4                        # run the fleet
+#   docker compose run --rm --no-deps -e JOB_COUNT=50 producer        # push 50 jobs
+#   docker compose run --rm --no-deps -e INTERRUPT_COUNT=1 interrupter # chaos
+#
+# NOTES on the one-shot tools:
+#  - count goes via env var, not a positional arg: `docker compose run SERVICE
+#    <token>` REPLACES the container command with <token>.
+#  - always pass --no-deps: without it, `run` reconciles dependency services to
+#    their configured scale (1) and stops+removes extra worker replicas.
 #
 # Workers discover each other's shared queue via Redis; the interrupter finds
 # worker replicas via the "worker" service DNS name.
@@ -36,6 +42,10 @@ services:
     command: ["python", "-m", "cheapskate.worker"]
     environment:
       <<: *app-env
+      # Job duration knobs pass through from the host shell so tests can speed
+      # things up (defaults match config.py).
+      JOB_MIN_SECONDS: ${JOB_MIN_SECONDS:-5.0}
+      JOB_MAX_SECONDS: ${JOB_MAX_SECONDS:-30.0}
     depends_on:
       redis:
         condition: service_healthy
@@ -52,8 +62,8 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # One-shot: pushes jobs then exits. Override count as a command arg, e.g.
-  # `docker compose run --rm producer 200`. Not started by `up` (profile).
+  # One-shot: pushes jobs then exits. Override count via env, e.g.
+  # `docker compose run --rm -e JOB_COUNT=200 producer`. Not started by `up`.
   producer:
     <<: *app-image
     command: ["python", "-m", "cheapskate.job_producer"]
@@ -67,14 +77,15 @@ services:
     profiles: ["tools"]
 
   # One-shot chaos tool: interrupt a random worker. Not started by `up`.
-  # `docker compose run --rm interrupter 2` interrupts two random workers.
+  # Deliberately NO depends_on: worker — `docker compose run` reconciles
+  # dependencies to their configured scale (1), which would stop+remove the
+  # extra replicas started with `--scale worker=N`, stranding their in-flight
+  # jobs. Run it against an already-running fleet.
   interrupter:
     <<: *app-image
     command: ["python", "-m", "cheapskate.interrupter"]
     environment:
       <<: *app-env
       WORKER_SERVICE: worker
-    depends_on:
-      - worker
     restart: "no"
     profiles: ["tools"]

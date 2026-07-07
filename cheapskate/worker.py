@@ -103,6 +103,14 @@ async def lifespan(app: FastAPI):
 
     threading.Thread(target=_watch_for_stop, daemon=True).start()
     yield
+    # Shutdown (uvicorn caught SIGTERM/SIGINT — e.g. `docker stop`, compose
+    # scale-down, or an ASG terminating the instance). Treat it exactly like an
+    # interruption: stop taking jobs and requeue the in-flight one before the
+    # process dies, so no work is lost. Docker allows 10s before SIGKILL.
+    if not worker.interrupt.is_set():
+        log.info("received shutdown signal — draining like an interruption")
+        worker.interrupt.set()
+    worker.stopped.wait(timeout=8.0)
 
 
 app = FastAPI(lifespan=lifespan)

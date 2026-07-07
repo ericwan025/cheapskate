@@ -10,11 +10,13 @@ via DNS to the IPs of *all* replicas. We resolve it, pick one, and hit it.
 
 Run:  python -m cheapskate.interrupter                  # interrupt 1 random worker
       python -m cheapskate.interrupter 3                # interrupt 3 random workers
+      INTERRUPT_COUNT=3 python -m cheapskate.interrupter # same, via env (compose)
       python -m cheapskate.interrupter http://host:8000 # interrupt a specific worker
 """
 from __future__ import annotations
 
 import logging
+import os
 import random
 import socket
 import sys
@@ -57,11 +59,18 @@ def run(count: int) -> None:
 
 
 def _parse_args(argv: list[str]) -> tuple[list[str] | None, int]:
-    """Return (explicit_urls, count). Explicit URL(s) bypass discovery."""
+    """Return (explicit_urls, count). Explicit URL(s) bypass discovery.
+
+    Count comes from a positional arg when given, else the INTERRUPT_COUNT env
+    var (default 1). Env is how docker-compose drives this — `docker compose run`
+    replaces the command with any trailing token, so positional args can't be
+    used there.
+    """
     if len(argv) > 1 and argv[1].startswith("http"):
         return argv[1:], len(argv) - 1
-    count = int(argv[1]) if len(argv) > 1 else 1
-    return None, count
+    if len(argv) > 1:
+        return None, int(argv[1])
+    return None, int(os.environ.get("INTERRUPT_COUNT", "1"))
 
 
 if __name__ == "__main__":
