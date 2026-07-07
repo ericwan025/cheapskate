@@ -14,6 +14,10 @@ def _float(name: str, default: float) -> float:
     return float(os.environ.get(name, default))
 
 
+# --- Queue backend -------------------------------------------------------
+# "redis" (local/Phase 1-2) or "sqs" (AWS/Phase 3). Selects the JobQueue impl.
+QUEUE_BACKEND = os.environ.get("QUEUE_BACKEND", "redis").lower()
+
 # --- Redis / queue -------------------------------------------------------
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
@@ -40,6 +44,21 @@ WORKER_PORT = _int("WORKER_PORT", 8000)
 # --- Producer ------------------------------------------------------------
 # Default number of jobs pushed when none is given on the CLI / env.
 DEFAULT_JOB_COUNT = _int("JOB_COUNT", 50)
+
+# --- SQS (Phase 3) -------------------------------------------------------
+# URL of the job queue on AWS. boto3 reads AWS_REGION / AWS_DEFAULT_REGION and
+# credentials from the environment / instance role — never hardcoded here.
+SQS_QUEUE_URL = os.environ.get("SQS_QUEUE_URL", "")
+AWS_REGION = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or ""
+# Long-poll wait when receiving (0-20s). Fewer empty receives, faster shutdown.
+SQS_WAIT_SECONDS = _int("SQS_WAIT_SECONDS", 5)
+
+# --- Spot interruption watcher (Phase 3) ---------------------------------
+# The worker polls the EC2 instance-metadata "instance-action" endpoint; a 200
+# there is the ~2-minute spot-termination warning. Off unless we're on SQS.
+SPOT_POLL_SECONDS = _float("SPOT_POLL_SECONDS", 5.0)
+IMDS_BASE = os.environ.get("IMDS_BASE", "http://169.254.169.254")
+SPOT_ACTION_PATH = os.environ.get("SPOT_ACTION_PATH", "/latest/meta-data/spot/instance-action")
 
 # --- Interrupter ---------------------------------------------------------
 # DNS name that resolves to all worker replicas (docker-compose service name).

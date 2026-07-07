@@ -93,3 +93,17 @@ class JobQueue:
 
     def completed_ids(self) -> set[int]:
         return {int(x) for x in self.client.smembers(config.COMPLETED_SET_KEY)}
+
+
+def make_queue(worker_id: str):
+    """Return the queue backend selected by config.QUEUE_BACKEND.
+
+    The worker, producer, and orchestrator all go through this, so switching
+    between the local Redis stack and AWS SQS is a single env var
+    (QUEUE_BACKEND=redis|sqs) with no code changes.
+    """
+    if config.QUEUE_BACKEND == "sqs":
+        from .sqs_queue import SqsQueue  # lazy: boto3 only needed on AWS
+
+        return SqsQueue(worker_id)
+    return JobQueue(worker_id)

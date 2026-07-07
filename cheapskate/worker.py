@@ -25,8 +25,8 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 
-from . import config
-from .queue import JobQueue
+from . import config, spot_watch
+from .queue import make_queue
 
 WORKER_ID = os.environ.get("WORKER_ID") or socket.gethostname()
 
@@ -39,10 +39,16 @@ log = logging.getLogger("worker")
 
 class Worker:
     def __init__(self) -> None:
-        self.queue = JobQueue(WORKER_ID)
-        self.interrupt = threading.Event()   # set by POST /interrupt
+        self.queue = make_queue(WORKER_ID)   # Redis locally, SQS on AWS
+        self.interrupt = threading.Event()   # set by POST /interrupt or a spot notice
         self.stopped = threading.Event()      # set when the loop has fully exited
         self.current_job: dict | None = None
+
+    def request_drain(self) -> None:
+        """Trip the interrupt flag once (idempotent). Shared entry point for the
+        local POST /interrupt, a SIGTERM, and the EC2 spot-interruption watcher."""
+        if not self.interrupt.is_set():
+            self.interrupt.set()
 
     # --- the work loop ---------------------------------------------------
     def run(self) -> None:
@@ -93,6 +99,10 @@ worker = Worker()
 async def lifespan(app: FastAPI):
     t = threading.Thread(target=worker.run, name="work-loop", daemon=True)
     t.start()
+
+    # On the real AWS fleet, poll the EC2 spot-interruption endpoint and drain the
+    # same way as a local /interrupt. No-op locally (QUEUE_BACKEND != sqs).
+    spot_watch.start(on_interrupt=worker.request_drain, stop_event=worker.stopped)
 
     def _watch_for_stop() -> None:
         # When the work loop finishes draining, stop the HTTP server too so the

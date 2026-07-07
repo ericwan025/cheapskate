@@ -15,7 +15,7 @@ import os
 import sys
 
 from . import config
-from .queue import JobQueue
+from .queue import make_queue
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [producer] %(message)s")
 log = logging.getLogger("producer")
@@ -23,8 +23,8 @@ log = logging.getLogger("producer")
 
 def produce(count: int, start_id: int = 1) -> None:
     # The producer never reserves jobs, so its worker_id is irrelevant; it only
-    # touches the shared pending list.
-    queue = JobQueue(worker_id="producer")
+    # adds jobs to the shared queue (Redis list or SQS, per QUEUE_BACKEND).
+    queue = make_queue(worker_id="producer")
 
     log.info("pushing %d job(s) starting at id %d", count, start_id)
     for job_id in range(start_id, start_id + count):
