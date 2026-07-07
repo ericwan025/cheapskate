@@ -18,3 +18,13 @@ output "jobs_dlq_url" {
   description = "URL of the dead-letter queue — inspect failed jobs here."
   value       = aws_sqs_queue.jobs_dlq.url
 }
+
+output "worker_role_arn" {
+  description = "ARN of the least-privilege worker IAM role."
+  value       = aws_iam_role.worker.arn
+}
+
+output "worker_instance_profile" {
+  description = "Instance profile name to attach to the worker launch template."
+  value       = aws_iam_instance_profile.worker.name
+}
