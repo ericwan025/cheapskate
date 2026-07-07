@@ -22,7 +22,7 @@ import signal
 import time
 
 from . import config
-from .queue import JobQueue
+from .queue import make_queue
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [orchestrator] %(message)s")
 log = logging.getLogger("orchestrator")
@@ -35,18 +35,29 @@ def desired_workers(pending: int) -> int:
 
 
 def _make_scaler():
-    """Return a DockerScaler, or None to fall back to log-only mode."""
+    """Return the actuator for the current backend, or None for log-only mode.
+
+    Same decision function drives both; only the actuator differs:
+      - redis (local) -> DockerScaler launches worker containers.
+      - sqs   (AWS)   -> AsgScaler drives the spot + on-demand Auto Scaling Groups.
+    Any construction failure (no docker socket, no AWS creds/ASGs) degrades to
+    Phase 1 log-only behaviour instead of crashing.
+    """
     try:
+        if config.QUEUE_BACKEND == "sqs":
+            from .aws_scaler import AsgScaler
+
+            return AsgScaler()
         from .scaler import DockerScaler
 
         return DockerScaler()
-    except Exception as exc:  # noqa: BLE001 - any docker/socket problem => log-only
-        log.warning("docker unavailable (%s) — running log-only, no actuation", exc)
+    except Exception as exc:  # noqa: BLE001 - any actuator problem => log-only
+        log.warning("actuator unavailable (%s) — running log-only", exc)
         return None
 
 
 def run() -> None:
-    queue = JobQueue(worker_id="orchestrator")
+    queue = make_queue(worker_id="orchestrator")
     scaler = _make_scaler()
 
     log.info(
@@ -85,7 +96,10 @@ def run() -> None:
                 change,
             )
 
-            if scaler is not None and running != want:
+            # Always actuate: DockerScaler no-ops when already at `want`, and
+            # AsgScaler re-splits spot vs on-demand each cycle as interruption
+            # pressure shifts even when the total is unchanged.
+            if scaler is not None:
                 scaler.scale_to(want)
 
             last_decision = want

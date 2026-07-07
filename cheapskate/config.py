@@ -71,6 +71,24 @@ MIN_WORKERS = _int("MIN_WORKERS", 1)
 MAX_WORKERS = _int("MAX_WORKERS", 10)
 ORCHESTRATOR_INTERVAL_SECONDS = _float("ORCHESTRATOR_INTERVAL_SECONDS", 3.0)
 
+# --- AWS Auto Scaling actuator (Phase 3: orchestrator drives the ASGs) ---
+# The two ASGs Terraform created: one 100% spot (cheap, interruptible), one
+# on-demand (reliable fallback). Names come from `terraform output`.
+SPOT_ASG_NAME = os.environ.get("SPOT_ASG_NAME", "")
+ON_DEMAND_ASG_NAME = os.environ.get("ON_DEMAND_ASG_NAME", "")
+# Hard caps on desired capacity per ASG — mirror the Terraform max_size so the
+# orchestrator never asks for more than the ASG will allow (set_desired_capacity
+# fails outside [min,max]).
+SPOT_MAX_CAPACITY = _int("SPOT_MAX_CAPACITY", 10)
+ON_DEMAND_MAX_CAPACITY = _int("ON_DEMAND_MAX_CAPACITY", 5)
+# Reliability baseline: always keep at least this fraction of the fleet on
+# on-demand so a spot mass-reclaim can't drop us to zero capacity.
+ON_DEMAND_BASE_FRACTION = _float("ON_DEMAND_BASE_FRACTION", 0.2)
+# Recent-interruption pressure is an EWMA of the spot ASG's capacity shortfall
+# (desired minus actually-in-service). As it rises, more of the fleet is placed
+# on on-demand. Alpha weights the newest sample.
+INTERRUPTION_EWMA_ALPHA = _float("INTERRUPTION_EWMA_ALPHA", 0.3)
+
 # --- Scaler (Phase 2: orchestrator actuates worker containers) -----------
 # Image the orchestrator launches worker containers from (same shared image).
 WORKER_IMAGE = os.environ.get("WORKER_IMAGE", "cheapskate:local")
