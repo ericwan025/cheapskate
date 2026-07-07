@@ -94,3 +94,43 @@ variable "instance_job_max_seconds" {
   type        = number
   default     = 30
 }
+
+# --- Auto Scaling Groups ----------------------------------------------------
+# All desired capacities default to 0: applying the stack creates the groups but
+# launches NO instances (so $0 EC2 cost) until the orchestrator — or you — scale up.
+
+variable "spot_instance_types" {
+  description = "Instance types the spot ASG may launch (diversify to improve capacity availability)."
+  type        = list(string)
+  default     = ["t3.small", "t3a.small", "t2.small"]
+}
+
+variable "spot_min_size" {
+  type    = number
+  default = 0
+}
+
+variable "spot_max_size" {
+  type    = number
+  default = 10
+}
+
+variable "spot_desired_capacity" {
+  type    = number
+  default = 0
+}
+
+variable "on_demand_min_size" {
+  type    = number
+  default = 0
+}
+
+variable "on_demand_max_size" {
+  type    = number
+  default = 5
+}
+
+variable "on_demand_desired_capacity" {
+  type    = number
+  default = 0
+}

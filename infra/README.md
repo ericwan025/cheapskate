@@ -5,7 +5,13 @@ Provisions the AWS side of cheapskate. Built incrementally, one commit per piece
 - [x] **SQS** — job queue + dead-letter queue (`sqs.tf`)
 - [x] **IAM** — least-privilege worker role + instance profile (`iam.tf`)
 - [x] **ECR + launch template** — worker image repo + boot config (`ecr.tf`, `launch_template.tf`)
-- [ ] ASGs — spot + on-demand on the same launch template
+- [x] **ASGs** — spot + on-demand on the same launch template (`autoscaling.tf`)
+
+## Cost safety
+
+Every ASG `desired_capacity` defaults to **0** — `terraform apply` creates the
+groups but launches no EC2 instances. You pay for compute only while workers are
+deliberately running; `terraform destroy` removes everything.
 
 ## Credentials
 
