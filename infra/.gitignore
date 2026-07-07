@@ -1,0 +1,10 @@
+# Never commit Terraform state — it can contain resource metadata and secrets.
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+crash.log
+
+# Real variable values (may hold account IDs, profiles). Keep only the example.
+terraform.tfvars
+*.auto.tfvars

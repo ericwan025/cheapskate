@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars (git-ignored) and edit. Nothing here is required —
+# every variable has a safe default — but this is where you'd pin your region,
+# AWS profile, and queue tuning without touching any .tf file.
+
+# aws_region  = "us-west-2"
+# aws_profile = "my-sso-profile"
+# project     = "cheapskate"
+
+# visibility_timeout_seconds = 120
+# max_receive_count          = 5
